@@ -8,6 +8,7 @@ Template repository for native UAV Neo installation on local computer
 - [Installation](#installation)
 - [Updating](#updating)
 - [Troubleshooting](#troubleshooting)
+  - [Connection diagnostics](#connection-diagnostics)
   - [Setup log files](#setup-log-files)
   - [Simulator won't connect (Windows/WSL2)](#simulator-wont-connect-windowswsl2)
   - [Python 3.9 fails to install](#python-39-fails-to-install)
@@ -64,7 +65,7 @@ Welcome to the UAV Neo Drone command-line installer for Windows, Mac, and Linux.
    - Install all pip dependencies from `requirements.txt`
    - Configure your shell environment
 
-5. **Windows only (WSL2):** The setup script will display an orange warning with a PowerShell command to configure your Windows Firewall. Open **PowerShell as Administrator** on Windows and run the command shown. This is required for the simulator to communicate with your Python scripts over the network. You only need to do this once.
+5. **Windows only (WSL2):** The setup script will display an orange warning with a PowerShell command to configure your Windows Firewall. Open **PowerShell as Administrator** on Windows and run the command shown. This is required for the simulator to communicate with your Python scripts over the network. You only need to do this once. If the command fails, see [Simulator won't connect](#simulator-wont-connect-windowswsl2) in the troubleshooting section.
 
 6. At the end of setup, a post-installation check will run automatically. All 10 checks should show `[PASS]`. If any show `[FAIL]`, review the log file printed in the installation summary and contact your instructor.
 
@@ -79,7 +80,11 @@ may fail to connect when your computer is connected to the internet.
 
 Please open PowerShell as Administrator on Windows and run:
 
-  New-NetFirewallRule -DisplayName "WSL2 UAVNeo Simulator" -Direction Inbound -InterfaceAlias "vEthernet (WSL)" -Action Allow -Protocol UDP -LocalPort 5064-5065
+  New-NetFirewallRule -DisplayName "WSL2 UAVNeo Simulator" -Direction Inbound -InterfaceAlias (Get-NetAdapter -IncludeHidden | Where-Object { $_.Name -like '*WSL*' } | Select-Object -First 1 -ExpandProperty Name) -Action Allow -Protocol UDP -LocalPort 5064-5065
+
+If that command fails, first find your WSL adapter name:
+  Get-NetAdapter -IncludeHidden | Where-Object { $_.Name -like '*WSL*' }
+Then use the Name from the output in place of the -InterfaceAlias parameter.
 
 You only need to run this command once.
 ==========================================================================
@@ -215,6 +220,16 @@ You will be prompted to select which component to update (labs, library, or sim)
 
 ## Troubleshooting
 
+### Connection diagnostics
+
+Run the built-in diagnostic script to check your networking setup:
+
+```sh
+python3 uav-neo-installer/drone-student/scripts/diagnose.py
+```
+
+This checks your simulator IP resolution, UDP connectivity on ports 5064/5065, Windows Firewall rule status, and WSL adapter configuration. Share the output with your instructor if you need help.
+
 ### Setup log files
 
 Setup and update logs are saved to `drone-student/scripts/.logs/`. Each run creates a timestamped log file (e.g., `setup_2026-03-29_18-41-11.log`). Share this file with your instructor if you encounter issues.
@@ -224,8 +239,44 @@ Setup and update logs are saved to `drone-student/scripts/.logs/`. Each run crea
 If the simulator connects when offline but not when connected to the internet, you need to configure the Windows Firewall. Open **PowerShell as Administrator** and run:
 
 ```powershell
-New-NetFirewallRule -DisplayName "WSL2 UAVNeo Simulator" -Direction Inbound -InterfaceAlias "vEthernet (WSL)" -Action Allow -Protocol UDP -LocalPort 5064-5065
+New-NetFirewallRule -DisplayName "WSL2 UAVNeo Simulator" -Direction Inbound -InterfaceAlias (Get-NetAdapter -IncludeHidden | Where-Object { $_.Name -like '*WSL*' } | Select-Object -First 1 -ExpandProperty Name) -Action Allow -Protocol UDP -LocalPort 5064-5065
 ```
+
+If you get an error saying **"The specified interface was not found"**, the WSL adapter on your machine has a different name. Find it by running:
+
+```powershell
+Get-NetAdapter -IncludeHidden | Where-Object { $_.Name -like '*WSL*' }
+```
+
+Common adapter names include:
+- `vEthernet (WSL)` — older Windows builds
+- `vEthernet (WSL (Hyper-V firewall))` — newer Windows builds
+
+Use the exact `Name` value from the output and run:
+
+```powershell
+New-NetFirewallRule -DisplayName "WSL2 UAVNeo Simulator" -Direction Inbound -InterfaceAlias "YOUR_ADAPTER_NAME_HERE" -Action Allow -Protocol UDP -LocalPort 5064-5065
+```
+
+**Alternative: WSL2 mirrored networking mode**
+
+If you cannot get the firewall rule working, you can switch WSL2 to mirrored networking mode. This makes WSL2 share the Windows host's network stack directly, so no firewall rule is needed. **Requires Windows 11 22H2 or later** (will not work on Windows 10).
+
+1. Open (or create) the file `%USERPROFILE%\.wslconfig` in a text editor (e.g., `C:\Users\YourName\.wslconfig`)
+2. Add the following:
+
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+
+3. Shut down WSL and reopen your terminal:
+
+```powershell
+wsl --shutdown
+```
+
+> **Note:** Mirrored mode is a system-wide setting that may affect other WSL2 tools such as Docker. If you experience issues with other applications, remove the setting and use the firewall rule approach instead.
 
 ### Python 3.9 fails to install
 
