@@ -341,11 +341,13 @@ elif [ "$PLATFORM" == 'linux' ]; then
     log_silent "Writing .config file..."
 
     # Linux config command
+    # Note: UDP buffer tuning (net.ipv4.udp_mem) is intentionally NOT run from
+    # .config — it lives in uav_tool.sh and is invoked lazily by 'drone sim'
+    # so students aren't prompted for sudo on every new terminal.
     echo "DRONE_ABSOLUTE_PATH=${DRONE_DIR}
 DRONE_IP=127.0.0.1
 DRONE_TEAM=student
-DRONE_CONFIG_LOADED=TRUE
-sudo sysctl -w net.ipv4.udp_mem=\"65535 131071 262142\"" > "${SCRIPT_DIR}/.config"
+DRONE_CONFIG_LOADED=TRUE" > "${SCRIPT_DIR}/.config"
 
     log_silent "Writing .local_bashrc.sh..."
 
@@ -427,11 +429,13 @@ elif [ "$PLATFORM" == 'mac' ]; then
     log_silent "Writing .config file..."
 
     # Mac config command
+    # Note: UDP buffer tuning (net.inet.udp.maxdgram) is intentionally NOT run
+    # from .config — it lives in uav_tool.sh and is invoked lazily by
+    # 'drone sim' so students aren't prompted for sudo on every new terminal.
     echo "DRONE_ABSOLUTE_PATH=${DRONE_DIR}
 DRONE_IP=127.0.0.1
 DRONE_TEAM=student
-DRONE_CONFIG_LOADED=TRUE
-sudo sysctl -w net.inet.udp.maxdgram=65535" > "${SCRIPT_DIR}/.config"
+DRONE_CONFIG_LOADED=TRUE" > "${SCRIPT_DIR}/.config"
 
     log_silent "Writing .local_bashrc.sh..."
 

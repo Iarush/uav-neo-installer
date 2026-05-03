@@ -1,6 +1,45 @@
 #!/bin/bash
 # Creates the drone tool for easily using and communicating with a drone
 
+# Raise the UDP buffer once per shell session, only when actually needed.
+# Called from 'drone sim'. No-op on WSL (Windows handles buffers itself) and
+# no-op if the kernel already has the desired value, so sudo only prompts when
+# the value really needs changing.
+_drone_tune_udp() {
+  [ "$DRONE_UDP_TUNED" = "1" ] && return 0
+
+  if grep -qi "microsoft" /proc/version 2>/dev/null; then
+    export DRONE_UDP_TUNED=1
+    return 0
+  fi
+
+  if ! command -v sysctl >/dev/null 2>&1; then
+    export DRONE_UDP_TUNED=1
+    return 0
+  fi
+
+  local key want
+  case "$(uname)" in
+    Linux)  key="net.ipv4.udp_mem";      want="65535 131071 262142" ;;
+    Darwin) key="net.inet.udp.maxdgram"; want="65535" ;;
+    *)      export DRONE_UDP_TUNED=1; return 0 ;;
+  esac
+
+  local current
+  current=$(sysctl -n "$key" 2>/dev/null | tr -s '[:space:]' ' ' | sed 's/^ //;s/ $//')
+  if [ "$current" = "$want" ]; then
+    export DRONE_UDP_TUNED=1
+    return 0
+  fi
+
+  echo "Tuning UDP buffer (${key}) — sudo password may be required (one time per session)..."
+  if sudo sysctl -w "${key}=\"${want}\"" >/dev/null; then
+    export DRONE_UDP_TUNED=1
+  else
+    echo "Warning: could not raise UDP buffer. Simulator may drop packets under load."
+  fi
+}
+
 drone() {
   if [ "$DRONE_CONFIG_LOADED" != "TRUE" ]; then
     echo "Error: unable to find your local .config file.  Please make sure that you setup the drone tool correctly."
@@ -50,6 +89,7 @@ drone() {
         echo "Usage: drone sim <filename.py> [additional arguments...]"
         return 1
       fi
+      _drone_tune_udp
       shift  # remove "sim" from args
       local script="$1"; shift  # grab the filename
       python3 "$script" -s "$@"
