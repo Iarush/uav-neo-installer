@@ -1,6 +1,45 @@
 #!/bin/bash
 # Creates the drone tool for easily using and communicating with a drone
 
+# Raise the UDP buffer once per shell session, only when actually needed.
+# Called from 'drone sim'. No-op on WSL (Windows handles buffers itself) and
+# no-op if the kernel already has the desired value, so sudo only prompts when
+# the value really needs changing.
+_drone_tune_udp() {
+  [ "$DRONE_UDP_TUNED" = "1" ] && return 0
+
+  if grep -qi "microsoft" /proc/version 2>/dev/null; then
+    export DRONE_UDP_TUNED=1
+    return 0
+  fi
+
+  if ! command -v sysctl >/dev/null 2>&1; then
+    export DRONE_UDP_TUNED=1
+    return 0
+  fi
+
+  local key want
+  case "$(uname)" in
+    Linux)  key="net.ipv4.udp_mem";      want="65535 131071 262142" ;;
+    Darwin) key="net.inet.udp.maxdgram"; want="65535" ;;
+    *)      export DRONE_UDP_TUNED=1; return 0 ;;
+  esac
+
+  local current
+  current=$(sysctl -n "$key" 2>/dev/null | tr -s '[:space:]' ' ' | sed 's/^ //;s/ $//')
+  if [ "$current" = "$want" ]; then
+    export DRONE_UDP_TUNED=1
+    return 0
+  fi
+
+  echo "Tuning UDP buffer (${key}) — sudo password may be required (one time per session)..."
+  if sudo sysctl -w "${key}=\"${want}\"" >/dev/null; then
+    export DRONE_UDP_TUNED=1
+  else
+    echo "Warning: could not raise UDP buffer. Simulator may drop packets under load."
+  fi
+}
+
 drone() {
   if [ "$DRONE_CONFIG_LOADED" != "TRUE" ]; then
     echo "Error: unable to find your local .config file.  Please make sure that you setup the drone tool correctly."
@@ -50,9 +89,111 @@ drone() {
         echo "Usage: drone sim <filename.py> [additional arguments...]"
         return 1
       fi
+      _drone_tune_udp
       shift  # remove "sim" from args
       local script="$1"; shift  # grab the filename
       python3 "$script" -s "$@"
+      ;;
+
+    open_sim)
+      # Locate the simulator folder. DRONE_ABSOLUTE_PATH is the drone-student dir;
+      # the simulator lives one level up alongside it (and on Windows, that path
+      # is a symlink into /mnt/c/Users/<user>/UAVNeo-Simulator).
+      local sim_root="$(dirname "$DRONE_ABSOLUTE_PATH")/UAVNeo-Simulator"
+      if [ ! -d "$sim_root" ]; then
+        echo "Error: simulator folder not found at ${sim_root}."
+        echo "Run setup.sh or 'bash \$(dirname \"\$DRONE_ABSOLUTE_PATH\")/drone-student/scripts/update.sh' to install it."
+        return 1
+      fi
+
+      # The simulator builds are packaged as UAVSim_<Platform>_v<version>/.
+      # Pick the first match so version bumps don't break this command.
+      local sim_build
+      sim_build=$(find -L "$sim_root" -maxdepth 1 -mindepth 1 -type d -name 'UAVSim_*' | head -n1)
+      if [ -z "$sim_build" ]; then
+        echo "Error: no UAVSim_* build folder found inside ${sim_root}."
+        return 1
+      fi
+
+      # Detect host OS and launch the right binary.
+      if grep -qi "microsoft" /proc/version 2>/dev/null; then
+        # WSL — invoke the .exe through cmd.exe so Windows owns the process and
+        # resolves DLLs from a real NTFS path (not a \\wsl.localhost UNC path).
+        local exe_path="${sim_build}/UAVSim.exe"
+        if [ ! -f "$exe_path" ]; then
+          echo "Error: UAVSim.exe not found at ${exe_path}."
+          return 1
+        fi
+        local win_path
+        win_path=$(wslpath -w "$exe_path" 2>/dev/null)
+        if [ -z "$win_path" ]; then
+          echo "Error: could not translate ${exe_path} to a Windows path via wslpath."
+          return 1
+        fi
+        echo "Launching simulator: ${win_path}"
+        ( cd "$sim_build" && cmd.exe /c start "" "$win_path" ) >/dev/null 2>&1 &
+        disown 2>/dev/null
+      elif [ "$(uname)" = "Darwin" ]; then
+        local app_path
+        app_path=$(find -L "$sim_build" -maxdepth 1 -mindepth 1 -name 'UAVSim*.app' | head -n1)
+        if [ -z "$app_path" ]; then
+          echo "Error: UAVSim*.app bundle not found in ${sim_build}."
+          return 1
+        fi
+        echo "Launching simulator: ${app_path}"
+        open "$app_path"
+      elif [ "$(uname)" = "Linux" ]; then
+        local lin_exe
+        lin_exe=$(find -L "$sim_build" -maxdepth 1 -mindepth 1 -type f \( -name 'UAVSim.x86_64' -o -name 'UAVSim' \) | head -n1)
+        if [ -z "$lin_exe" ]; then
+          echo "Error: UAVSim Linux binary not found in ${sim_build}."
+          return 1
+        fi
+        chmod +x "$lin_exe" 2>/dev/null
+        echo "Launching simulator: ${lin_exe}"
+        ( cd "$sim_build" && "$lin_exe" ) >/dev/null 2>&1 &
+        disown 2>/dev/null
+      else
+        echo "Error: unrecognized OS. 'drone open_sim' supports Windows (WSL), Mac, and Linux."
+        return 1
+      fi
+      ;;
+
+    open_sim_folder)
+      local sim_root="$(dirname "$DRONE_ABSOLUTE_PATH")/UAVNeo-Simulator"
+      if [ ! -d "$sim_root" ]; then
+        echo "Error: simulator folder not found at ${sim_root}."
+        return 1
+      fi
+
+      if grep -qi "microsoft" /proc/version 2>/dev/null; then
+        # Resolve the symlink so Explorer opens the real /mnt/c path, not \\wsl.localhost.
+        local real_root
+        real_root=$(readlink -f "$sim_root")
+        local win_path
+        win_path=$(wslpath -w "$real_root" 2>/dev/null)
+        if [ -z "$win_path" ]; then
+          echo "Error: could not translate ${real_root} to a Windows path."
+          return 1
+        fi
+        echo "Opening folder: ${win_path}"
+        explorer.exe "$win_path" >/dev/null 2>&1 &
+        disown 2>/dev/null
+      elif [ "$(uname)" = "Darwin" ]; then
+        echo "Opening folder: ${sim_root}"
+        open "$sim_root"
+      elif [ "$(uname)" = "Linux" ]; then
+        if ! command -v xdg-open >/dev/null 2>&1; then
+          echo "Error: xdg-open not found. Install xdg-utils or open manually: ${sim_root}"
+          return 1
+        fi
+        echo "Opening folder: ${sim_root}"
+        xdg-open "$sim_root" >/dev/null 2>&1 &
+        disown 2>/dev/null
+      else
+        echo "Error: unrecognized OS. 'drone open_sim_folder' supports Windows (WSL), Mac, and Linux."
+        return 1
+      fi
       ;;
 
     backup)
@@ -119,6 +260,8 @@ drone() {
       echo "  drone remove              removes your team directory from your drone."
       echo "  drone setup               sets up your team directory on your drone."
       echo "  drone sim <file.py>       runs the specified drone program with the simulator."
+      echo "  drone open_sim            launches the UAVNeo simulator GUI."
+      echo "  drone open_sim_folder     opens the simulator folder in your file manager."
       echo "  drone sync [labs|library|all]  copies local files to your drone with rsync."
       echo "  drone backup              downloads drone code to a local backup folder."
       echo "  drone test                prints config to check if the drone tool is working."

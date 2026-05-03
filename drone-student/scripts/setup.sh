@@ -115,7 +115,37 @@ do
             cd ..
             # Clone file from github, format dirs
             log "Cloning simulator for ${PLATFORM}..."
-            run_cmd git clone -b "${PLATFORM}" --single-branch "${SIM_URL}"
+            if [ "$PLATFORM" == 'windows' ]; then
+                # Windows DLL loader applies a stricter search policy on UNC paths
+                # (\\wsl.localhost\...), which prevents UAVSim.exe from finding
+                # dstorage.dll and other Unity DLLs sitting next to it. Clone the
+                # simulator onto the Windows drive and symlink it back into NEO_DIR
+                # so the rest of the tooling sees the expected layout.
+                # %USERPROFILE% is the on-disk folder; %USERNAME% (logon name) can
+                # differ. Run cmd.exe from /tmp to avoid the UNC-cwd warning.
+                WIN_PROFILE=$(cd /tmp && cmd.exe /c "echo %USERPROFILE%" 2>/dev/null | tr -d '\r' | tail -n1)
+                if [ -z "$WIN_PROFILE" ]; then
+                    log ""
+                    echo -e "\e[1;31m[ERROR] Could not detect Windows user profile via cmd.exe.\e[0m"
+                    log "WSL must be able to invoke cmd.exe to install the simulator on the Windows drive."
+                    log_silent "========== SETUP LOG END (ABORTED) =========="
+                    exit 1
+                fi
+                WIN_PROFILE_WSL=$(wslpath -u "$WIN_PROFILE" 2>/dev/null)
+                if [ -z "$WIN_PROFILE_WSL" ] || [ ! -d "$WIN_PROFILE_WSL" ]; then
+                    log ""
+                    echo -e "\e[1;31m[ERROR] Windows profile path not accessible from WSL: ${WIN_PROFILE}\e[0m"
+                    log_silent "========== SETUP LOG END (ABORTED) =========="
+                    exit 1
+                fi
+                SIM_DIR="${WIN_PROFILE_WSL}/UAVNeo-Simulator"
+                log_silent "Installing simulator on Windows drive: ${SIM_DIR}"
+                rm -rf "${SIM_DIR}"
+                run_cmd git clone -b "${PLATFORM}" --single-branch "${SIM_URL}" "${SIM_DIR}"
+                ln -sfn "${SIM_DIR}" "${NEO_DIR}/UAVNeo-Simulator"
+            else
+                run_cmd git clone -b "${PLATFORM}" --single-branch "${SIM_URL}"
+            fi
 
             # Allow permissions
             if [ "$PLATFORM" == 'mac' ]; then
@@ -311,11 +341,13 @@ elif [ "$PLATFORM" == 'linux' ]; then
     log_silent "Writing .config file..."
 
     # Linux config command
+    # Note: UDP buffer tuning (net.ipv4.udp_mem) is intentionally NOT run from
+    # .config — it lives in uav_tool.sh and is invoked lazily by 'drone sim'
+    # so students aren't prompted for sudo on every new terminal.
     echo "DRONE_ABSOLUTE_PATH=${DRONE_DIR}
 DRONE_IP=127.0.0.1
 DRONE_TEAM=student
-DRONE_CONFIG_LOADED=TRUE
-sudo sysctl -w net.ipv4.udp_mem=\"65535 131071 262142\"" > "${SCRIPT_DIR}/.config"
+DRONE_CONFIG_LOADED=TRUE" > "${SCRIPT_DIR}/.config"
 
     log_silent "Writing .local_bashrc.sh..."
 
@@ -397,11 +429,13 @@ elif [ "$PLATFORM" == 'mac' ]; then
     log_silent "Writing .config file..."
 
     # Mac config command
+    # Note: UDP buffer tuning (net.inet.udp.maxdgram) is intentionally NOT run
+    # from .config — it lives in uav_tool.sh and is invoked lazily by
+    # 'drone sim' so students aren't prompted for sudo on every new terminal.
     echo "DRONE_ABSOLUTE_PATH=${DRONE_DIR}
 DRONE_IP=127.0.0.1
 DRONE_TEAM=student
-DRONE_CONFIG_LOADED=TRUE
-sudo sysctl -w net.inet.udp.maxdgram=65535" > "${SCRIPT_DIR}/.config"
+DRONE_CONFIG_LOADED=TRUE" > "${SCRIPT_DIR}/.config"
 
     log_silent "Writing .local_bashrc.sh..."
 
