@@ -23,8 +23,8 @@ drone() {
     jupyter)
       local prev_dir="$PWD"
       cd "$DRONE_ABSOLUTE_PATH"/labs || return
-      echo "Creating a Jupyter server..."
-      jupyter-notebook --no-browser
+      echo "Creating a JupyterLab server..."
+      jupyter lab --no-browser
       cd "$prev_dir" || return
       ;;
 
@@ -115,7 +115,7 @@ drone() {
       echo "  drone cd                  move to the drone labs directory on your computer."
       echo "  drone connect             connects to your drone with ssh."
       echo "  drone help                prints this help message."
-      echo "  drone jupyter             starts a jupyter server in the drone labs directory."
+      echo "  drone jupyter             starts a JupyterLab server in the drone labs directory."
       echo "  drone remove              removes your team directory from your drone."
       echo "  drone setup               sets up your team directory on your drone."
       echo "  drone sim <file.py>       runs the specified drone program with the simulator."

@@ -130,12 +130,12 @@ do
 done
 
 
-log '[2/3] Select your course curriculum: [oneshot, outreach]'
-select CURRICULUM in oneshot outreach
+log '[2/3] Select your course curriculum: [oneshot, prereq]'
+select CURRICULUM in oneshot prereq
 
 do
     case $CURRICULUM in
-        oneshot|outreach)
+        oneshot|prereq)
             log_silent "Curriculum selected: $CURRICULUM"
             # Go one folder back from scripts directory
             cd "$SCRIPT_DIR"/..
@@ -199,8 +199,7 @@ if [ "$PLATFORM" == 'windows' ]; then
         exit 1
     fi
 
-    # continue with regular setup
-    run_pipe "yes | sudo apt install jupyter-notebook"
+    # JupyterLab is installed via pip from requirements.txt (into drone-venv).
     run_pipe "yes | sudo apt install ffmpeg libsm6 libxext6 -y"
     run_cmd busybox dos2unix "${SCRIPT_DIR}"/uav_tool.sh
 
@@ -305,7 +304,7 @@ elif [ "$PLATFORM" == 'linux' ]; then
         exit 1
     fi
 
-    run_pipe "yes | sudo apt install jupyter-notebook"
+    # JupyterLab is installed via pip from requirements.txt (into drone-venv).
     run_pipe "yes | sudo apt install ffmpeg libsm6 libxext6 -y"
     run_cmd busybox dos2unix "${SCRIPT_DIR}"/uav_tool.sh
 
