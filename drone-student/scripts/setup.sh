@@ -121,15 +121,24 @@ do
                 # dstorage.dll and other Unity DLLs sitting next to it. Clone the
                 # simulator onto the Windows drive and symlink it back into NEO_DIR
                 # so the rest of the tooling sees the expected layout.
-                WIN_USER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r\n ')
-                if [ -z "$WIN_USER" ]; then
+                # %USERPROFILE% is the on-disk folder; %USERNAME% (logon name) can
+                # differ. Run cmd.exe from /tmp to avoid the UNC-cwd warning.
+                WIN_PROFILE=$(cd /tmp && cmd.exe /c "echo %USERPROFILE%" 2>/dev/null | tr -d '\r' | tail -n1)
+                if [ -z "$WIN_PROFILE" ]; then
                     log ""
-                    echo -e "\e[1;31m[ERROR] Could not detect Windows username via cmd.exe.\e[0m"
+                    echo -e "\e[1;31m[ERROR] Could not detect Windows user profile via cmd.exe.\e[0m"
                     log "WSL must be able to invoke cmd.exe to install the simulator on the Windows drive."
                     log_silent "========== SETUP LOG END (ABORTED) =========="
                     exit 1
                 fi
-                SIM_DIR="/mnt/c/Users/${WIN_USER}/UAVNeo-Simulator"
+                WIN_PROFILE_WSL=$(wslpath -u "$WIN_PROFILE" 2>/dev/null)
+                if [ -z "$WIN_PROFILE_WSL" ] || [ ! -d "$WIN_PROFILE_WSL" ]; then
+                    log ""
+                    echo -e "\e[1;31m[ERROR] Windows profile path not accessible from WSL: ${WIN_PROFILE}\e[0m"
+                    log_silent "========== SETUP LOG END (ABORTED) =========="
+                    exit 1
+                fi
+                SIM_DIR="${WIN_PROFILE_WSL}/UAVNeo-Simulator"
                 log_silent "Installing simulator on Windows drive: ${SIM_DIR}"
                 rm -rf "${SIM_DIR}"
                 run_cmd git clone -b "${PLATFORM}" --single-branch "${SIM_URL}" "${SIM_DIR}"
