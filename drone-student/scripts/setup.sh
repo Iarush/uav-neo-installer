@@ -115,7 +115,28 @@ do
             cd ..
             # Clone file from github, format dirs
             log "Cloning simulator for ${PLATFORM}..."
-            run_cmd git clone -b "${PLATFORM}" --single-branch "${SIM_URL}"
+            if [ "$PLATFORM" == 'windows' ]; then
+                # Windows DLL loader applies a stricter search policy on UNC paths
+                # (\\wsl.localhost\...), which prevents UAVSim.exe from finding
+                # dstorage.dll and other Unity DLLs sitting next to it. Clone the
+                # simulator onto the Windows drive and symlink it back into NEO_DIR
+                # so the rest of the tooling sees the expected layout.
+                WIN_USER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r\n ')
+                if [ -z "$WIN_USER" ]; then
+                    log ""
+                    echo -e "\e[1;31m[ERROR] Could not detect Windows username via cmd.exe.\e[0m"
+                    log "WSL must be able to invoke cmd.exe to install the simulator on the Windows drive."
+                    log_silent "========== SETUP LOG END (ABORTED) =========="
+                    exit 1
+                fi
+                SIM_DIR="/mnt/c/Users/${WIN_USER}/UAVNeo-Simulator"
+                log_silent "Installing simulator on Windows drive: ${SIM_DIR}"
+                rm -rf "${SIM_DIR}"
+                run_cmd git clone -b "${PLATFORM}" --single-branch "${SIM_URL}" "${SIM_DIR}"
+                ln -sfn "${SIM_DIR}" "${NEO_DIR}/UAVNeo-Simulator"
+            else
+                run_cmd git clone -b "${PLATFORM}" --single-branch "${SIM_URL}"
+            fi
 
             # Allow permissions
             if [ "$PLATFORM" == 'mac' ]; then
