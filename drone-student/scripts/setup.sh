@@ -246,15 +246,19 @@ mv "${LABS_TMP}/labs" "${DRONE_DIR}/labs"
 rm -rf "${LABS_TMP}"
 
 log '[4/4] Installing all drone libraries and dependencies...'
+
+# Minimal Docker images often ship without sudo; root doesn't need it anyway.
+SUDO=$([ "$(id -u)" -eq 0 ] && echo "" || echo "sudo")
+
 if [ "$PLATFORM" == 'windows' ]; then
     log_silent "Starting Windows (WSL2) setup..."
-    run_pipe "yes | sudo apt update"
-    run_pipe "yes | sudo apt install -y python-is-python3 python3-pip"
+    run_pipe "yes | $SUDO apt update"
+    run_pipe "yes | $SUDO apt install -y python-is-python3 python3-pip"
 
     # Single post-PPA apt call — triggers/ldconfig run once instead of three times.
-    run_pipe "yes | sudo add-apt-repository ppa:deadsnakes/ppa"
-    run_pipe "yes | sudo apt update"
-    run_pipe "yes | sudo apt install -y python3.9 python3.9-venv ffmpeg libsm6 libxext6"
+    run_pipe "yes | $SUDO add-apt-repository ppa:deadsnakes/ppa"
+    run_pipe "yes | $SUDO apt update"
+    run_pipe "yes | $SUDO apt install -y python3.9 python3.9-venv ffmpeg libsm6 libxext6"
 
     if ! command -v python3.9 &> /dev/null; then
         log ""
@@ -282,7 +286,7 @@ if [ "$PLATFORM" == 'windows' ]; then
         exit 1
     fi
 
-    run_cmd busybox dos2unix "${SCRIPT_DIR}"/uav_tool.sh
+    run_cmd sed -i 's/\r$//' "${SCRIPT_DIR}"/uav_tool.sh
 
     log_silent "Writing .config file..."
 
@@ -344,13 +348,13 @@ BASHEOF
 
 elif [ "$PLATFORM" == 'linux' ]; then
     log_silent "Starting Linux setup..."
-    run_pipe "yes | sudo apt update"
-    run_pipe "yes | sudo apt install -y python-is-python3 python3-pip"
+    run_pipe "yes | $SUDO apt update"
+    run_pipe "yes | $SUDO apt install -y python-is-python3 python3-pip"
 
     # Single post-PPA apt call — triggers/ldconfig run once instead of three times.
-    run_pipe "yes | sudo add-apt-repository ppa:deadsnakes/ppa"
-    run_pipe "yes | sudo apt update"
-    run_pipe "yes | sudo apt install -y python3.9 python3.9-venv ffmpeg libsm6 libxext6"
+    run_pipe "yes | $SUDO add-apt-repository ppa:deadsnakes/ppa"
+    run_pipe "yes | $SUDO apt update"
+    run_pipe "yes | $SUDO apt install -y python3.9 python3.9-venv ffmpeg libsm6 libxext6"
 
     if ! command -v python3.9 &> /dev/null; then
         log ""
@@ -378,7 +382,7 @@ elif [ "$PLATFORM" == 'linux' ]; then
         exit 1
     fi
 
-    run_cmd busybox dos2unix "${SCRIPT_DIR}"/uav_tool.sh
+    run_cmd sed -i 's/\r$//' "${SCRIPT_DIR}"/uav_tool.sh
 
     log_silent "Writing .config file..."
 
