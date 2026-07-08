@@ -103,11 +103,11 @@ do
     esac
 done
 
-log '[2/4] Select your course curriculum: [oneshot, prereq]'
-select CURRICULUM in oneshot prereq
+log '[2/4] Select your course curriculum: [oneshot, prereq, summer-course]'
+select CURRICULUM in oneshot prereq summer-course
 do
     case $CURRICULUM in
-        oneshot|prereq)
+        oneshot|prereq|summer-course)
             log_silent "Curriculum selected: $CURRICULUM"
             break
             ;;
