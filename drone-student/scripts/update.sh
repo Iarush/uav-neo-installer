@@ -89,11 +89,11 @@ if [ "$FOLDER" == 'labs' ]; then
     echo -e "\e[33m[WARNING] This command will replace your existing labs folder!"
     echo -e "Rename or back up your previous lab folder before continuing."
     echo -e "Press Ctrl+C to exit if needed.\e[0m"
-    log 'Select your course curriculum: [oneshot, prereq]'
-    select CURRICULUM in oneshot prereq
+    log 'Select your course curriculum: [oneshot, prereq, summer-course]'
+    select CURRICULUM in oneshot prereq summer-course
     do
         case $CURRICULUM in
-            oneshot|prereq)
+            oneshot|prereq|summer-course)
                 log_silent "Curriculum selected: $CURRICULUM"
                 # Go one folder back from scripts directory
                 cd "$SCRIPT_DIR"/..
